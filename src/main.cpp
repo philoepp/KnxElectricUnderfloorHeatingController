@@ -6,19 +6,28 @@
 /* -------------------------------------------------------------------------- 
 * DEFINES
 ---------------------------------------------------------------------------- */
-#define DEBUG
+//#define DEBUG
 
 #define TEMP_SENSOR_PIN         2     // IO pin of the used arduino
 #define TEMP_SENSOR_RESOLUTION  12    // [bit] Resolution in bit (9 to 12)
-#define TEMP_SENSOR_READ_CYCLE  3000  // [ms] Time base for collecting new temperature values
-#define TEMP_SENSOR_SEND_CYCLE  30000 // [ms] Time base for sending the new temperature to the KNX bus
+#define TEMP_SENSOR_READ_CYCLE  5000  // [ms] Time base for collecting new temperature values
+#define TEMP_SENSOR_SEND_CYCLE  60000 // [ms] Time base for sending the new temperature to the KNX bus
 
 #define TEMP_SETPOINT_MIN       6     // [°C]  6°C Frost protection
-#define TEMP_SETPOINT_MAX       35    // [°C] 35°C should be enough?..
+#define TEMP_SETPOINT_MAX       34    // [°C] 33°C on the surface should not be exceeded!
+#define TEMP_HYSTERESIS         2     // [K] 2K Hysteresis for 2-point regulator
+#define MINIMUM_RELAY_TIME      5     // [min] 5min minimum relay state time (ensure at least ~20y of operation..)
 
-#define KNX_PA                  "1.0.181" // PA of the device
-#define KNX_GA_TEMP_CURRENT     "8/2/9"   // GA for the measured temperature
-#define KNX_GA_TEMP_SETPOINT    "8/2/10"   // GA for the temperature setpoint
+#define KNX_PA                    "1.0.181" // PA of the device
+// Group address "Outputs"
+#define KNX_GA_TEMP_CONCRETE      "8/2/9"   // GA for the measured concrete temperature
+#define KNX_GA_HEATER_ACTUATOR    "1/1/47"  // GA of the actuator the electric heater is connected to
+
+// Group address "Inputs"
+#define KNX_GA_TEMP_ROOM          "8/2/10"  // GA for the measured room temperature
+#define KNX_GA_TEMP_ROOM_SETPOINT "8/2/11"  // GA for the temperature setpoint
+#define KNX_GA_WINDOW_1_STATE     "5/5/2" // GA of a Window sensor (0 Open; 1 Closed)
+#define KNX_GA_WINDOW_2_STATE     "5/5/3" // GA of a Window sensor (0 Open; 1 Closed)
 
 /* -------------------------------------------------------------------------- 
 Objects/variables
@@ -122,7 +131,7 @@ static void vSendTemperatureToKnx(void)
   // Check if time period is over
   if (millis() - u32LastTime > TEMP_SENSOR_SEND_CYCLE)
   {
-    knx.groupWrite2ByteFloat(KNX_GA_TEMP_CURRENT, temperature);
+    knx.groupWrite2ByteFloat(KNX_GA_TEMP_CONCRETE, temperature);
     u32LastTime = millis(); 
   }
 }
@@ -136,13 +145,15 @@ static void vInitializeKNX(void)
   }
 
   // Reset UART
-  if(Serial.available()) {
+  if(Serial1.available()) {
     knx.uartReset();
   }
 
   // Register KNX group addresses
-  knx.addListenGroupAddress(KNX_GA_TEMP_CURRENT);
-  knx.addListenGroupAddress(KNX_GA_TEMP_SETPOINT); 
+  knx.addListenGroupAddress(KNX_GA_TEMP_CONCRETE);
+  knx.addListenGroupAddress(KNX_GA_TEMP_ROOM_SETPOINT); 
+  knx.addListenGroupAddress(KNX_GA_WINDOW_1_STATE);
+  knx.addListenGroupAddress(KNX_GA_WINDOW_2_STATE);
 }
 
 void serialEvent1() 
@@ -167,14 +178,14 @@ void serialEvent1()
     {
       case KNX_COMMAND_READ:
         // Is the destination address equal to group address KNX_GA_TEMPERATURE
-        if(strcmp(target.c_str(), KNX_GA_TEMP_CURRENT) == 0) 
+        if(strcmp(target.c_str(), KNX_GA_TEMP_CONCRETE) == 0) 
         {
-          knx.groupAnswer2ByteFloat(KNX_GA_TEMP_CURRENT, temperature);
+          knx.groupAnswer2ByteFloat(KNX_GA_TEMP_CONCRETE, temperature);
         }
         break;
 
       case KNX_COMMAND_WRITE:
-        if (strcmp(target.c_str(), KNX_GA_TEMP_SETPOINT) == 0) 
+        if (strcmp(target.c_str(), KNX_GA_TEMP_ROOM_SETPOINT) == 0) 
         {
           temperatureSetpoint = telegram->get2ByteFloatValue();
 
