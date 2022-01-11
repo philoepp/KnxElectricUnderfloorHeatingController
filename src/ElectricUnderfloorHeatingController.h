@@ -48,8 +48,8 @@ enum NightDay
 
 enum WindowState
 {
-  WindowOpen = 0,
-  WindowClosed = 1
+  WindowClosed = 0,
+  WindowOpen = 1
 };
 
 struct ElectricFloorHeatingRegulation
