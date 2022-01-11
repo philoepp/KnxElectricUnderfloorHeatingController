@@ -22,7 +22,8 @@
 
 #define TEMP_SETPOINT_MIN       6     // [°C]  6°C Frost protection
 #define TEMP_SETPOINT_MAX       33    // [°C] 33°C on the surface should not be exceeded!
-#define TEMP_HYSTERESIS         1     // [K] 1K Hysteresis for 2-point regulator of room temperature
+#define TEMP_MAX_HYSTERESIS     0.5   // [K] 0.5K Hysteresis for maximum temperature switch off
+#define TEMP_HYSTERESIS         0.5   // [K] 0.5K Hysteresis for 2-point regulator of room temperature
 #define TEMP_REDUCTION_NIGHT    2     // [K] 2K Temperature reduction in night mode
 #define MINIMUM_RELAY_TIME      5     // [min] 5min minimum relay state time (ensure at least ~20y of operation..)
 
@@ -260,14 +261,32 @@ static void vCalculateInternalSetpoint(void)
 
 static void vTwoPointTemperatureRegulation(void)
 {
+  static bool fMaxTempViolated = false;
+
   // Check if measured temperature is above temperature setpoint
-  if(Heater.dFloorTemperature > Heater.u8InternalTemperatureSetpoint)
+  if(Heater.dRoomTemperature > Heater.u8InternalTemperatureSetpoint)
   {
     Heater.fRelayState = false;
   }
-  else if(Heater.dFloorTemperature <= (Heater.u8InternalTemperatureSetpoint - TEMP_HYSTERESIS))
+  else if(Heater.dRoomTemperature <= (Heater.u8InternalTemperatureSetpoint - TEMP_HYSTERESIS))
   {
     Heater.fRelayState = true;
+  }
+
+  // However, even if the room temperature setpoint isn't reached, the floor temperature needs to be watched!
+  if(Heater.dFloorTemperature >= TEMP_SETPOINT_MAX)
+  {
+    fMaxTempViolated = true;
+  }
+  else if(Heater.dFloorTemperature < (TEMP_SETPOINT_MAX - TEMP_MAX_HYSTERESIS))
+  {
+    fMaxTempViolated = false;
+  }
+
+  // If maximum temperature is violated, set off the heater
+  if(fMaxTempViolated == true)
+  {
+    Heater.fRelayState = false;
   }
 }
 
@@ -321,6 +340,16 @@ void serialEvent1()
         {
           knx.groupAnswer2ByteFloat(KNX_GA_TEMP_CONCRETE, Heater.dFloorTemperature);
         }
+        // Current enable/disable state
+        else if(strcmp(target.c_str(), KNX_GA_DISABLE_FUNCTION) == 0) 
+        {
+          knx.groupAnswerBool(KNX_GA_DISABLE_FUNCTION, Heater.fHeatingEnabled);
+        }
+        // Current room temperature setpoint
+        else if(strcmp(target.c_str(), KNX_GA_TEMP_ROOM_SETPOINT) == 0) 
+        {
+          knx.groupAnswer1ByteInt(KNX_GA_TEMP_ROOM_SETPOINT, Heater.u8TemperatureSetpoint);
+        } 
         break;
 
       case KNX_COMMAND_WRITE:
