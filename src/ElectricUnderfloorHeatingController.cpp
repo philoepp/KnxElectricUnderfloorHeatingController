@@ -8,7 +8,7 @@
 /* -------------------------------------------------------------------------- 
 * DEFINES
 ---------------------------------------------------------------------------- */
-//#define DEBUG
+#define DEBUG
 
 /* -------------------------------------------------------------------------- 
 Objects/variables
@@ -61,9 +61,6 @@ void loop(void)
   // Send calculated/measured values to the KNX bus
   vSendTemperatureToKnx();
   vSendRelayStateToKnx();
-
-  // Because of reasons :p
-  delay(1);
 }
 
 /* -------------------------------------------------------------------------- 
@@ -84,13 +81,19 @@ static void vInitializeEeprom(void)
       EEPROM.update(i, 0xFF);
     }
 
-    // Update ID
+    // Update initial values
     EEPROM.update(EEPROM_ADDRESS_ID, DEVICE_ID);
+    EEPROM.update(EEPROM_ADDRESS_TEMP_SET, TEMP_SETPOINT_DEFAULT);
   }
   else
   {
     // Device ID didn't changed, load values
     Heater.u8TemperatureSetpoint = EEPROM.read(EEPROM_ADDRESS_TEMP_SET);
+
+#ifdef DEBUG
+    Serial.print("Device ID didn't changed, read old setpoint from EEPROM: ");
+    Serial.println(Heater.u8TemperatureSetpoint);
+#endif
   }
 }
 
@@ -136,8 +139,8 @@ static void vReadTemperatureFromSensor(void)
     u32LastRequest = millis(); 
 
 #ifdef DEBUG
-    Serial.print("Temperature: ");
-    Serial.println(temperature);
+    Serial.print("Current floor temperature: ");
+    Serial.println(Heater.dFloorTemperature);
 #endif
   }
 }
@@ -169,6 +172,11 @@ static void vSendRelayStateToKnx(void)
       u32LastTime = millis(); 
 
       knx.groupWriteBool(KNX_GA_TEMP_CONCRETE, Heater.fRelayState);
+
+#ifdef DEBUG
+      Serial.print("Send relay state to KNX bus: ");
+      Serial.println(Heater.fRelayState);
+#endif
     }
   }
 }
@@ -308,31 +316,61 @@ void serialEvent1()
 
           // Update EEPROM, if value has changed
           EEPROM.update(EEPROM_ADDRESS_TEMP_SET, Heater.u8TemperatureSetpoint);
+
+#ifdef DEBUG
+        Serial.print("New room temperature setpoint: ");
+        Serial.println(Heater.u8TemperatureSetpoint);
+#endif
         } 
         // Current room temperature
         else if(strcmp(target.c_str(), KNX_GA_TEMP_ROOM) == 0) 
         {
           Heater.dRoomTemperature = telegram->get2ByteFloatValue();
+
+#ifdef DEBUG
+        Serial.print("Current room temperature: ");
+        Serial.println(Heater.dRoomTemperature);
+#endif
         }
         // Current day/night state
         else if(strcmp(target.c_str(), KNX_GA_DAY_NIGHT) == 0) 
         {
           Heater.fDayNight = telegram->getBool();
+
+#ifdef DEBUG
+        Serial.print("Day/Night changed to: ");
+        Serial.println(Heater.fDayNight);
+#endif
         }
         // Current state of window 1
         else if(strcmp(target.c_str(), KNX_GA_WINDOW_1_STATE) == 0) 
         {
           Heater.fWindow1State = telegram->getBool();
+
+#ifdef DEBUG
+        Serial.print("Window 1 changed state to: ");
+        Serial.println(Heater.fWindow1State);
+#endif
         }
         // Current state of window 2
         else if(strcmp(target.c_str(), KNX_GA_WINDOW_2_STATE) == 0) 
         {
           Heater.fWindow2State = telegram->getBool();
+
+#ifdef DEBUG
+        Serial.print("Window 2 changed state to: ");
+        Serial.println(Heater.fWindow1State);
+#endif
         }
         // Current enable/disable state
         else if(strcmp(target.c_str(), KNX_GA_DISABLE_FUNCTION) == 0) 
         {
           Heater.fHeatingEnabled = telegram->getBool();
+
+#ifdef DEBUG
+        Serial.print("Heater enabled/disabled: ");
+        Serial.println(Heater.fWindow1State);
+#endif
         }
         break;
 
