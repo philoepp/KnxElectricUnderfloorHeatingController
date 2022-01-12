@@ -161,11 +161,6 @@ static void vReadTemperatureFromSensor(void)
     // Start new temperature read  
     sensors.requestTemperatures(); 
     u32LastRequest = millis(); 
-
-#ifdef DEBUG
-    Serial.print("Current floor temperature: ");
-    Serial.println(Heater.dFloorTemperature);
-#endif
   }
 }
 
@@ -178,6 +173,11 @@ static void vSendTemperatureToKnx(void)
   {
     knx.groupWrite2ByteFloat(KNX_GA_TEMP_CONCRETE, Heater.dFloorTemperature);
     u32LastTime = millis(); 
+
+#ifdef DEBUG
+    Serial.print("Currently send floor temperature: ");
+    Serial.println(Heater.dFloorTemperature);
+#endif
   }
 }
 
@@ -206,7 +206,7 @@ static void vSendErrorStateToKnx(void)
 static void vSendRelayStateToKnx(void)
 {
   static uint32_t u32LastTime = millis();
-  static bool fLastSendState = true; // Init with true, to force update on startup
+  static bool fLastSendState = false;
 
     // Check if an update of the relay state is needed
   if(fLastSendState != Heater.fRelayState)
@@ -512,7 +512,9 @@ void serialEvent1()
         // Error reset wanted?
         else if(strcmp(target.c_str(), KNX_GA_ERROR) == 0) 
         {
-          if(telegram->get1ByteIntValue() == ERROR_NO_ERROR_ACTICE)
+          // Check if error reset is wanted and error isn't already reset
+          if(   (telegram->get1ByteIntValue() == ERROR_NO_ERROR_ACTICE)
+              &&(Heater.u8Error != ERROR_NO_ERROR_ACTICE))
           {
             Heater.u8Error = ERROR_NO_ERROR_ACTICE;
 

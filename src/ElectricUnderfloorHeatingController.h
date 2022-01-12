@@ -23,21 +23,24 @@
 #define TEMP_SENSOR_ERROR_DELTA     5     // [K] 5K - Temperature of the sensor should increase this much, when running for the error time
 #define ERROR_SEND_CYCLE            (5UL * 60UL * 1000UL) // [ms] 5min - Time base for sending the error state to KNX bus
 
-#define TEMP_SETPOINT_MIN           6     // [°C]  6°C Frost protection
+// Temperature setpoint settings
 #define TEMP_SETPOINT_DEFAULT       20.0f  // [°C] 20°C default temperature setpoint (float)
+#define TEMP_SETPOINT_MIN           6     // [°C]  6°C Frost protection
 #define TEMP_SETPOINT_MAX           33    // [°C] 33°C on the surface should not be exceeded!
 #define TEMP_SETPOINT_CORRECTION    0.2   // [K] 0.2K Used as setpoint correction steps
 #define TEMP_SETPOINT_SEND_CYCLE    (30UL * 60UL * 1000UL) // [ms] 30min - Resend temperature setpoint every 30min
 #define TEMP_MAX_HYSTERESIS         0.5   // [K] 0.5K Hysteresis for maximum temperature switch off
 #define TEMP_HYSTERESIS             0.5   // [K] 0.5K Hysteresis for 2-point regulator of room temperature
 #define TEMP_REDUCTION_NIGHT        2     // [K] 2K Temperature reduction in night mode
+
+// Relay settings
 #define MINIMUM_RELAY_TIME          (5UL * 60UL * 1000UL) // [ms] 5min minimum relay state time (ensure at least ~20 years of operation..)
 
 // Define the physical address of the KNX device
 #define KNX_PA                      "1.0.181" // PA of the KNX device
 
 // Group address "Outputs"
-#define KNX_GA_TEMP_CONCRETE        "8/2/9"   // GA for the measured concrete temperature
+#define KNX_GA_TEMP_CONCRETE        "8/2/15"  // GA for the measured concrete temperature
 #define KNX_GA_HEATER_ACTUATOR      "1/1/47"  // GA of the actuator the electric heater is connected to
 #define KNX_GA_TEMP_ROOM_SETPOINT   "3/0/5"   // GA for the current active temperature setpoint
 #define KNX_GA_ERROR                "3/4/5"   // GA for sending an error, if something is wrong, also used to reset an error
@@ -50,6 +53,10 @@
 #define KNX_GA_FROST_PROTECTION     "3/3/5"   // GA to set the heater into frost protection mode (1 frost protection enabled; 0 normal operation)
 #define KNX_GA_DAY_NIGHT            "0/4/3"   // GA for the day/night shift (use reduced setpoint at night) (0 night; 1 day)
 #define KNX_GA_SUMMER_WINTER        "0/2/0"   // GA for the summer/winter switch (to disable the function in general in summer)
+
+/* -------------------------------------------------------------------------- 
+* ENUMS
+---------------------------------------------------------------------------- */
 
 enum Errors
 {
@@ -82,6 +89,9 @@ enum SummerWinterMode
   Summer = 1
 };
 
+/* -------------------------------------------------------------------------- 
+* STRUCTS/DATATYPES
+---------------------------------------------------------------------------- */
 struct ElectricFloorHeatingRegulation
 {
   float dTemperatureSetpoint = 0;
