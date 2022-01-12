@@ -18,6 +18,10 @@
 #define TEMP_SENSOR_READ_CYCLE      5000  // [ms] Time base for collecting new temperature values
 #define TEMP_SENSOR_SEND_CYCLE      60000 // [ms] Time base for sending the new temperature to the KNX bus
 
+// Temperature sensor reaction time error
+#define TEMP_SENSOR_ERROR_TIME      (60UL * 60UL * 1000UL) // [ms] 60min - Time the temperature of the sensor should increase
+#define TEMP_SENSOR_ERROR_DELTA     5     // [K] 5K - Temperature of the sensor should increase this much, when running for the error time
+
 #define TEMP_SETPOINT_MIN           6     // [°C]  6°C Frost protection
 #define TEMP_SETPOINT_DEFAULT       20.0f  // [°C] 20°C default temperature setpoint (float)
 #define TEMP_SETPOINT_MAX           33    // [°C] 33°C on the surface should not be exceeded!
@@ -26,7 +30,7 @@
 #define TEMP_MAX_HYSTERESIS         0.5   // [K] 0.5K Hysteresis for maximum temperature switch off
 #define TEMP_HYSTERESIS             0.5   // [K] 0.5K Hysteresis for 2-point regulator of room temperature
 #define TEMP_REDUCTION_NIGHT        2     // [K] 2K Temperature reduction in night mode
-#define MINIMUM_RELAY_TIME          5     // [min] 5min minimum relay state time (ensure at least ~20 years of operation..)
+#define MINIMUM_RELAY_TIME          (5UL * 60UL * 1000UL) // [ms] 5min minimum relay state time (ensure at least ~20 years of operation..)
 
 // Define the physical address of the KNX device
 #define KNX_PA                      "1.0.181" // PA of the KNX device
@@ -34,7 +38,8 @@
 // Group address "Outputs"
 #define KNX_GA_TEMP_CONCRETE        "8/2/9"   // GA for the measured concrete temperature
 #define KNX_GA_HEATER_ACTUATOR      "1/1/47"  // GA of the actuator the electric heater is connected to
-#define KNX_GA_TEMP_ROOM_SETPOINT   "3/0/5"  // GA for the temperature setpoint
+#define KNX_GA_TEMP_ROOM_SETPOINT   "3/0/5"   // GA for the current active temperature setpoint
+#define KNX_GA_ERROR                "3/4/5"   // GA for sending an error, if something is wrong
 
 // Group address "Inputs"
 #define KNX_GA_TEMP_ROOM            "8/2/10"  // GA for the measured room temperature
@@ -81,6 +86,7 @@ struct ElectricFloorHeatingRegulation
   bool fWindow2State = WindowClosed;
   bool fFrostProtection = false;
   bool fSummerWinterMode = Winter;
+  bool fError = false;
 };
 
 #endif //ELECTRIC_UNDERFLOOR_HEATING_CONTROLLER_H

@@ -36,6 +36,7 @@ static void vInitializeEeprom(void);
 static void vCalculateInternalSetpoint(void);
 static void vTwoPointTemperatureRegulation(void);
 static void vSendTemperatureSetpointToKnx(void);
+static void vCheckIfConreteTemperaturIsPlausible(void);
 
 /* -------------------------------------------------------------------------- 
 * FUNCTIONS
@@ -58,6 +59,7 @@ void loop(void)
   // Calculate internal working temperature setpoint and relay state
   vCalculateInternalSetpoint();
   vTwoPointTemperatureRegulation();
+  vCheckIfConreteTemperaturIsPlausible();
 
   // Send calculated/measured values to the KNX bus
   vSendTemperatureToKnx();
@@ -172,11 +174,12 @@ static void vSendRelayStateToKnx(void)
   static uint32_t u32LastTime = millis();
   static bool fLastSendState = true; // Init with true, to force update on startup
 
-  // Check if an update of the relay state is needed
+    // Check if an update of the relay state is needed
   if(fLastSendState != Heater.fRelayState)
   {
-    // Check if time period is over, to ensure minimum relay switch time
-    if ((millis() - u32LastTime) > (MINIMUM_RELAY_TIME * 60UL * 1000UL))
+    // Check if time period is over, to ensure minimum relay switch time, or an error occurend (then send immediately)
+    if((    (millis() - u32LastTime) > MINIMUM_RELAY_TIME)
+         || (Heater.fError == true) )
     {
       fLastSendState = Heater.fRelayState;
       u32LastTime = millis(); 
@@ -216,6 +219,38 @@ static void vSendTemperatureSetpointToKnx(void)
     knx.groupWrite2ByteFloat(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
     dLastSendValue = Heater.dTemperatureSetpoint;
   }
+}
+
+static void vCheckIfConreteTemperaturIsPlausible(void)
+{
+  static bool fRelayStateOld = false;
+  static uint32_t u32SwitchOnTime = 0;
+  static float dSwitchOnTemperature = 0.0;
+
+
+  // Check if relay state changed from off to on
+  if(   (Heater.fRelayState == true)
+      &&(fRelayStateOld == false)  )
+  {
+    // Save timestamp of the heater switch on (and temperature)
+    u32SwitchOnTime = millis();
+    dSwitchOnTemperature = Heater.dFloorTemperature;
+  }
+
+  // Check if heater is on for a long time
+  if(   (millis() - u32SwitchOnTime > TEMP_SENSOR_ERROR_TIME)
+      &&(Heater.fRelayState == true)  )
+  {
+    // Check if the temperature hasn't risen by a defined delta temperature
+    if(Heater.dFloorTemperature - dSwitchOnTemperature < TEMP_SENSOR_ERROR_DELTA)
+    {
+      // Set heater error to active
+      Heater.fError = true;
+    }
+  }
+
+  // Save old value for signal change detection
+  fRelayStateOld = Heater.fRelayState;
 }
 
 static void vCalculateInternalSetpoint(void)
@@ -272,9 +307,11 @@ static void vTwoPointTemperatureRegulation(void)
     fMaxTempViolated = false;
   }
 
-  // If maximum temperature is violated, or summer mode is active, set off the heater
+  // If maximum temperature is violated, 
+  // or summer mode is active, or an error occured, set off the heater
   if(   (fMaxTempViolated == true)
-      ||(Heater.fSummerWinterMode == Summer)  )
+      ||(Heater.fSummerWinterMode == Summer)  
+      ||(Heater.fError == true) )
   {
     Heater.fRelayState = false;
   }
@@ -304,6 +341,7 @@ static void vInitializeKNX(void)
   knx.addListenGroupAddress(KNX_GA_FROST_PROTECTION); 
   knx.addListenGroupAddress(KNX_GA_DAY_NIGHT);
   knx.addListenGroupAddress(KNX_GA_SUMMER_WINTER);
+  knx.addListenGroupAddress(KNX_GA_ERROR);
 }
 
 void serialEvent1() 
@@ -340,7 +378,12 @@ void serialEvent1()
         // Current room temperature setpoint
         else if(strcmp(target.c_str(), KNX_GA_TEMP_ROOM_SETPOINT) == 0) 
         {
-          knx.groupAnswer1ByteInt(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
+          knx.groupAnswer2ByteFloat(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
+        } 
+        // Error state request
+        else if(strcmp(target.c_str(), KNX_GA_ERROR) == 0) 
+        {
+          knx.groupAnswerBool(KNX_GA_ERROR, Heater.fError);
         } 
         break;
 
