@@ -218,7 +218,7 @@ static void vSendRelayStateToKnx(void)
       fLastSendState = Heater.fRelayState;
       u32LastTime = millis(); 
 
-      knx.groupWriteBool(KNX_GA_TEMP_CONCRETE, Heater.fRelayState);
+      knx.groupWriteBool(KNX_GA_HEATER_ACTUATOR, Heater.fRelayState);
 
 #ifdef DEBUG
       Serial.print("Send relay state to KNX bus: ");
