@@ -18,9 +18,10 @@
 #define TEMP_SENSOR_READ_CYCLE      5000  // [ms] Time base for collecting new temperature values
 #define TEMP_SENSOR_SEND_CYCLE      60000 // [ms] Time base for sending the new temperature to the KNX bus
 
-// Temperature sensor reaction time error
+// Error settings
 #define TEMP_SENSOR_ERROR_TIME      (60UL * 60UL * 1000UL) // [ms] 60min - Time the temperature of the sensor should increase
 #define TEMP_SENSOR_ERROR_DELTA     5     // [K] 5K - Temperature of the sensor should increase this much, when running for the error time
+#define ERROR_SEND_CYCLE            (5UL * 60UL * 1000UL) // [ms] 5min - Time base for sending the error state to KNX bus
 
 #define TEMP_SETPOINT_MIN           6     // [°C]  6°C Frost protection
 #define TEMP_SETPOINT_DEFAULT       20.0f  // [°C] 20°C default temperature setpoint (float)
@@ -49,6 +50,13 @@
 #define KNX_GA_FROST_PROTECTION     "3/3/5"   // GA to set the heater into frost protection mode (1 frost protection enabled; 0 normal operation)
 #define KNX_GA_DAY_NIGHT            "0/4/3"   // GA for the day/night shift (use reduced setpoint at night) (0 night; 1 day)
 #define KNX_GA_SUMMER_WINTER        "0/2/0"   // GA for the summer/winter switch (to disable the function in general in summer)
+
+enum Errors
+{
+  ERROR_NO_ERROR_ACTICE = 0,
+  ERROR_SENSOR_NOT_CONNECTED = 1,
+  ERROR_SENSOR_NOT_REACTING = 2
+};
 
 enum NightDay 
 { 
@@ -86,7 +94,7 @@ struct ElectricFloorHeatingRegulation
   bool fWindow2State = WindowClosed;
   bool fFrostProtection = false;
   bool fSummerWinterMode = Winter;
-  bool fError = false;
+  uint8_t u8Error = ERROR_NO_ERROR_ACTICE;
 };
 
 #endif //ELECTRIC_UNDERFLOOR_HEATING_CONTROLLER_H

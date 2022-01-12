@@ -37,6 +37,7 @@ static void vCalculateInternalSetpoint(void);
 static void vTwoPointTemperatureRegulation(void);
 static void vSendTemperatureSetpointToKnx(void);
 static void vCheckIfConreteTemperaturIsPlausible(void);
+static void vSendErrorStateToKnx(void);
 
 /* -------------------------------------------------------------------------- 
 * FUNCTIONS
@@ -65,6 +66,7 @@ void loop(void)
   vSendTemperatureToKnx();
   vSendRelayStateToKnx();
   vSendTemperatureSetpointToKnx();
+  vSendErrorStateToKnx();
 }
 
 /* -------------------------------------------------------------------------- 
@@ -146,6 +148,16 @@ static void vReadTemperatureFromSensor(void)
     // Collect temperature from sensor
     Heater.dFloorTemperature = sensors.getTempCByIndex(0);
 
+    // Check if temperature value is valid or not
+    if(Heater.dFloorTemperature == DEVICE_DISCONNECTED_C)
+    {
+      // Use minimum temperature as fallback
+      Heater.dFloorTemperature = TEMP_SETPOINT_MIN;
+
+      // Set error to active
+      Heater.u8Error = ERROR_SENSOR_NOT_CONNECTED;
+    }
+
     // Start new temperature read  
     sensors.requestTemperatures(); 
     u32LastRequest = millis(); 
@@ -169,6 +181,28 @@ static void vSendTemperatureToKnx(void)
   }
 }
 
+static void vSendErrorStateToKnx(void)
+{
+  static uint32_t u32LastTime = millis();
+  static uint8_t u8OldErrorState = ERROR_NO_ERROR_ACTICE;
+
+  // Check if time period is over
+  if (millis() - u32LastTime > ERROR_SEND_CYCLE)
+  {
+    knx.groupWrite1ByteInt(KNX_GA_ERROR, Heater.u8Error);
+    u32LastTime = millis(); 
+  }
+
+  // If the error state changes, also send out the error
+  if(u8OldErrorState != Heater.u8Error)
+  {
+    knx.groupWrite1ByteInt(KNX_GA_ERROR, Heater.u8Error);
+  }
+
+  // Save old state of u8Error for change detection
+  u8OldErrorState = Heater.u8Error;
+}
+
 static void vSendRelayStateToKnx(void)
 {
   static uint32_t u32LastTime = millis();
@@ -179,7 +213,7 @@ static void vSendRelayStateToKnx(void)
   {
     // Check if time period is over, to ensure minimum relay switch time, or an error occurend (then send immediately)
     if((    (millis() - u32LastTime) > MINIMUM_RELAY_TIME)
-         || (Heater.fError == true) )
+         || (Heater.u8Error != ERROR_NO_ERROR_ACTICE) )
     {
       fLastSendState = Heater.fRelayState;
       u32LastTime = millis(); 
@@ -245,7 +279,7 @@ static void vCheckIfConreteTemperaturIsPlausible(void)
     if(Heater.dFloorTemperature - dSwitchOnTemperature < TEMP_SENSOR_ERROR_DELTA)
     {
       // Set heater error to active
-      Heater.fError = true;
+      Heater.u8Error = ERROR_SENSOR_NOT_REACTING;
     }
   }
 
@@ -311,7 +345,7 @@ static void vTwoPointTemperatureRegulation(void)
   // or summer mode is active, or an error occured, set off the heater
   if(   (fMaxTempViolated == true)
       ||(Heater.fSummerWinterMode == Summer)  
-      ||(Heater.fError == true) )
+      ||(Heater.u8Error != ERROR_NO_ERROR_ACTICE) )
   {
     Heater.fRelayState = false;
   }
@@ -383,7 +417,7 @@ void serialEvent1()
         // Error state request
         else if(strcmp(target.c_str(), KNX_GA_ERROR) == 0) 
         {
-          knx.groupAnswerBool(KNX_GA_ERROR, Heater.fError);
+          knx.groupAnswer1ByteInt(KNX_GA_ERROR, Heater.u8Error);
         } 
         break;
 
