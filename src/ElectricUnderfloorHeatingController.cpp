@@ -35,6 +35,7 @@ static void vSendRelayStateToKnx(void);
 static void vInitializeEeprom(void);
 static void vCalculateInternalSetpoint(void);
 static void vTwoPointTemperatureRegulation(void);
+static void vSendTemperatureSetpointToKnx(void);
 
 /* -------------------------------------------------------------------------- 
 * FUNCTIONS
@@ -61,6 +62,7 @@ void loop(void)
   // Send calculated/measured values to the KNX bus
   vSendTemperatureToKnx();
   vSendRelayStateToKnx();
+  vSendTemperatureSetpointToKnx();
 }
 
 /* -------------------------------------------------------------------------- 
@@ -82,17 +84,21 @@ static void vInitializeEeprom(void)
     }
 
     // Update initial values
-    EEPROM.update(EEPROM_ADDRESS_ID, DEVICE_ID);
-    EEPROM.update(EEPROM_ADDRESS_TEMP_SET, TEMP_SETPOINT_DEFAULT);
+    EEPROM.put(EEPROM_ADDRESS_ID, (uint8_t)DEVICE_ID);
+    EEPROM.put(EEPROM_ADDRESS_TEMP_SET, (float)TEMP_SETPOINT_DEFAULT);
   }
   else
   {
     // Device ID didn't changed, load values
-    Heater.u8TemperatureSetpoint = EEPROM.read(EEPROM_ADDRESS_TEMP_SET);
+    EEPROM.get(EEPROM_ADDRESS_TEMP_SET, Heater.dTemperatureSetpoint);
+
+    // Check if old value is valid, apply limitations!
+    Heater.dTemperatureSetpoint = min(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MAX);
+    Heater.dTemperatureSetpoint = max(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MIN); 
 
 #ifdef DEBUG
     Serial.print("Device ID didn't changed, read old setpoint from EEPROM: ");
-    Serial.println(Heater.u8TemperatureSetpoint);
+    Serial.println(Heater.dTemperatureSetpoint);
 #endif
   }
 }
@@ -181,15 +187,42 @@ static void vSendRelayStateToKnx(void)
   }
 }
 
+static void vSendTemperatureSetpointToKnx(void)
+{
+  static uint32_t u32LastTime = millis();
+  static float dLastSendValue = 0.0;
+
+  // Check if time period is over
+  if (millis() - u32LastTime > TEMP_SETPOINT_SEND_CYCLE)
+  {
+    knx.groupWrite2ByteFloat(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
+    u32LastTime = millis(); 
+  }
+
+  // Check if temperature setpoint changed
+  if(dLastSendValue != Heater.dTemperatureSetpoint)
+  {
+#ifdef DEBUG
+    Serial.print("Last send value:" );
+    Serial.print(dLastSendValue);
+    Serial.print("; New value:" );
+    Serial.println(Heater.dTemperatureSetpoint);
+#endif
+
+    knx.groupWrite2ByteFloat(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
+    dLastSendValue = Heater.dTemperatureSetpoint;
+  }
+}
+
 static void vCalculateInternalSetpoint(void)
 {
   // Check if function is disabled in general or disabled through windows
-  if(   (Heater.fHeatingEnabled == false)
+  if(   (Heater.fFrostProtection == true)
       ||(Heater.fWindow1State == WindowOpen)
       ||(Heater.fWindow2State == WindowOpen)  )
   {
     // Heater is deactivated, use minimum setpoint (frost protection)
-    Heater.u8InternalTemperatureSetpoint = TEMP_SETPOINT_MIN;
+    Heater.dInternalTemperatureSetpoint = TEMP_SETPOINT_MIN;
   }
   else
   {
@@ -198,17 +231,17 @@ static void vCalculateInternalSetpoint(void)
     // Check if it's night mode
     if(Heater.fDayNight == Night)
     {
-      Heater.u8InternalTemperatureSetpoint = Heater.u8TemperatureSetpoint - TEMP_REDUCTION_NIGHT;
+      Heater.dInternalTemperatureSetpoint = Heater.dTemperatureSetpoint - TEMP_REDUCTION_NIGHT;
     }
     else
     {
-      Heater.u8InternalTemperatureSetpoint = Heater.u8TemperatureSetpoint;
+      Heater.dInternalTemperatureSetpoint = Heater.dTemperatureSetpoint;
     }
   }
 
   // Limit temperature setpoint to useful values
-  Heater.u8InternalTemperatureSetpoint = min(Heater.u8InternalTemperatureSetpoint, TEMP_SETPOINT_MAX);
-  Heater.u8InternalTemperatureSetpoint = max(Heater.u8InternalTemperatureSetpoint, TEMP_SETPOINT_MIN);
+  Heater.dInternalTemperatureSetpoint = min(Heater.dInternalTemperatureSetpoint, TEMP_SETPOINT_MAX);
+  Heater.dInternalTemperatureSetpoint = max(Heater.dInternalTemperatureSetpoint, TEMP_SETPOINT_MIN);
 }
 
 static void vTwoPointTemperatureRegulation(void)
@@ -216,11 +249,11 @@ static void vTwoPointTemperatureRegulation(void)
   static bool fMaxTempViolated = false;
 
   // Check if measured temperature is above temperature setpoint
-  if(Heater.dRoomTemperature > Heater.u8InternalTemperatureSetpoint)
+  if(Heater.dRoomTemperature > Heater.dInternalTemperatureSetpoint)
   {
     Heater.fRelayState = false;
   }
-  else if(Heater.dRoomTemperature <= (Heater.u8InternalTemperatureSetpoint - TEMP_HYSTERESIS))
+  else if(Heater.dRoomTemperature <= (Heater.dInternalTemperatureSetpoint - TEMP_HYSTERESIS))
   {
     Heater.fRelayState = true;
   }
@@ -257,12 +290,13 @@ static void vInitializeKNX(void)
 
   // Register KNX group addresses
   knx.addListenGroupAddress(KNX_GA_TEMP_CONCRETE);
+  knx.addListenGroupAddress(KNX_GA_TEMP_SETPOINT_CORR);
   knx.addListenGroupAddress(KNX_GA_HEATER_ACTUATOR);
   knx.addListenGroupAddress(KNX_GA_TEMP_ROOM);
   knx.addListenGroupAddress(KNX_GA_TEMP_ROOM_SETPOINT);
   knx.addListenGroupAddress(KNX_GA_WINDOW_1_STATE);
   knx.addListenGroupAddress(KNX_GA_WINDOW_2_STATE);
-  knx.addListenGroupAddress(KNX_GA_DISABLE_FUNCTION); 
+  knx.addListenGroupAddress(KNX_GA_FROST_PROTECTION); 
   knx.addListenGroupAddress(KNX_GA_DAY_NIGHT);
 }
 
@@ -293,33 +327,42 @@ void serialEvent1()
           knx.groupAnswer2ByteFloat(KNX_GA_TEMP_CONCRETE, Heater.dFloorTemperature);
         }
         // Current enable/disable state
-        else if(strcmp(target.c_str(), KNX_GA_DISABLE_FUNCTION) == 0) 
+        else if(strcmp(target.c_str(), KNX_GA_FROST_PROTECTION) == 0) 
         {
-          knx.groupAnswerBool(KNX_GA_DISABLE_FUNCTION, Heater.fHeatingEnabled);
+          knx.groupAnswerBool(KNX_GA_FROST_PROTECTION, Heater.fFrostProtection);
         }
         // Current room temperature setpoint
         else if(strcmp(target.c_str(), KNX_GA_TEMP_ROOM_SETPOINT) == 0) 
         {
-          knx.groupAnswer1ByteInt(KNX_GA_TEMP_ROOM_SETPOINT, Heater.u8TemperatureSetpoint);
+          knx.groupAnswer1ByteInt(KNX_GA_TEMP_ROOM_SETPOINT, Heater.dTemperatureSetpoint);
         } 
         break;
 
       case KNX_COMMAND_WRITE:
-        // Room temperature setpoint
-        if(strcmp(target.c_str(), KNX_GA_TEMP_ROOM_SETPOINT) == 0) 
+        // Room temperature setpoint correction
+        if(strcmp(target.c_str(), KNX_GA_TEMP_SETPOINT_CORR) == 0) 
         {
-          Heater.u8TemperatureSetpoint = telegram->get1ByteIntValue();
+          if(telegram->getBool() == SetpointIncrease)
+          {
+            // Increase internal temperature setpoint by the correction step
+            Heater.dTemperatureSetpoint += TEMP_SETPOINT_CORRECTION;
+          }
+          else
+          {
+            // Decrease internal temperature setpoint by the correction step
+            Heater.dTemperatureSetpoint -= TEMP_SETPOINT_CORRECTION;
+          }
 
           // Limit temperature setpoint to useful values
-          Heater.u8TemperatureSetpoint = min(Heater.u8TemperatureSetpoint, TEMP_SETPOINT_MAX);
-          Heater.u8TemperatureSetpoint = max(Heater.u8TemperatureSetpoint, TEMP_SETPOINT_MIN); 
+          Heater.dTemperatureSetpoint = min(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MAX);
+          Heater.dTemperatureSetpoint = max(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MIN); 
 
           // Update EEPROM, if value has changed
-          EEPROM.update(EEPROM_ADDRESS_TEMP_SET, Heater.u8TemperatureSetpoint);
+          EEPROM.put(EEPROM_ADDRESS_TEMP_SET, (float)Heater.dTemperatureSetpoint);
 
 #ifdef DEBUG
         Serial.print("New room temperature setpoint: ");
-        Serial.println(Heater.u8TemperatureSetpoint);
+        Serial.println(Heater.dTemperatureSetpoint);
 #endif
         } 
         // Current room temperature
@@ -359,17 +402,17 @@ void serialEvent1()
 
 #ifdef DEBUG
         Serial.print("Window 2 changed state to: ");
-        Serial.println(Heater.fWindow1State);
+        Serial.println(Heater.fWindow2State);
 #endif
         }
         // Current enable/disable state
-        else if(strcmp(target.c_str(), KNX_GA_DISABLE_FUNCTION) == 0) 
+        else if(strcmp(target.c_str(), KNX_GA_FROST_PROTECTION) == 0) 
         {
-          Heater.fHeatingEnabled = telegram->getBool();
+          Heater.fFrostProtection = telegram->getBool();
 
 #ifdef DEBUG
-        Serial.print("Heater enabled/disabled: ");
-        Serial.println(Heater.fWindow1State);
+        Serial.print("Heater frost protection active: ");
+        Serial.println(Heater.fFrostProtection);
 #endif
         }
         break;
