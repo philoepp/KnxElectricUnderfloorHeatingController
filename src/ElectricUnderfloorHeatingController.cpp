@@ -509,6 +509,18 @@ void serialEvent1()
         Serial.println(Heater.fFrostProtection);
 #endif
         }
+        // Error reset wanted?
+        else if(strcmp(target.c_str(), KNX_GA_ERROR) == 0) 
+        {
+          if(telegram->get1ByteIntValue() == ERROR_NO_ERROR_ACTICE)
+          {
+            Heater.u8Error = ERROR_NO_ERROR_ACTICE;
+
+#ifdef DEBUG
+            Serial.println("Error reset was whished!");
+#endif
+          }
+        }
         break;
 
       default:

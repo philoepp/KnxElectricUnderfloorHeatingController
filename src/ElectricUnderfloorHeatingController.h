@@ -40,7 +40,7 @@
 #define KNX_GA_TEMP_CONCRETE        "8/2/9"   // GA for the measured concrete temperature
 #define KNX_GA_HEATER_ACTUATOR      "1/1/47"  // GA of the actuator the electric heater is connected to
 #define KNX_GA_TEMP_ROOM_SETPOINT   "3/0/5"   // GA for the current active temperature setpoint
-#define KNX_GA_ERROR                "3/4/5"   // GA for sending an error, if something is wrong
+#define KNX_GA_ERROR                "3/4/5"   // GA for sending an error, if something is wrong, also used to reset an error
 
 // Group address "Inputs"
 #define KNX_GA_TEMP_ROOM            "8/2/10"  // GA for the measured room temperature
