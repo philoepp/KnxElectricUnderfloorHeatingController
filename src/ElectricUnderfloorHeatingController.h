@@ -7,9 +7,10 @@
 * DEFINES
 ---------------------------------------------------------------------------- */
 // EEPROM
-#define EEPROM_ADDRESS_ID           0     // Position 0 is used for a unique ID
-#define EEPROM_ADDRESS_TEMP_SET     1     // Position 1 is used for the temperature setpoint      
-#define DEVICE_ID                   0     // If the ID changes the EEPROM gets reinitialized  
+#define EEPROM_ADDRESS_ID           0     // Position 0 is used for a unique ID (1 byte)
+#define EEPROM_ADDRESS_SUM_WINTER   1     // Position 1 is used for the summer/winter switch
+#define EEPROM_ADDRESS_TEMP_SET     2     // Position 2 is used for the temperature setpoint
+#define DEVICE_ID                   1     // If the ID changes the EEPROM gets reinitialized  
 
 // Temperature sensor settings
 #define TEMP_SENSOR_PIN             2     // IO pin of the used arduino
@@ -42,6 +43,7 @@
 #define KNX_GA_WINDOW_2_STATE       "5/5/3"   // GA of a Window sensor (0 Open; 1 Closed)
 #define KNX_GA_FROST_PROTECTION     "3/3/5"   // GA to set the heater into frost protection mode (1 frost protection enabled; 0 normal operation)
 #define KNX_GA_DAY_NIGHT            "0/4/3"   // GA for the day/night shift (use reduced setpoint at night) (0 night; 1 day)
+#define KNX_GA_SUMMER_WINTER        "0/2/0"   // GA for the summer/winter switch (to disable the function in general in summer)
 
 enum NightDay 
 { 
@@ -61,6 +63,12 @@ enum SetpointCorrection
   SetpointIncrease = 1
 };
 
+enum SummerWinterMode
+{
+  Winter = 0,
+  Summer = 1
+};
+
 struct ElectricFloorHeatingRegulation
 {
   float dTemperatureSetpoint = 0;
@@ -72,6 +80,7 @@ struct ElectricFloorHeatingRegulation
   bool fWindow1State = WindowClosed;
   bool fWindow2State = WindowClosed;
   bool fFrostProtection = false;
+  bool fSummerWinterMode = Winter;
 };
 
 #endif //ELECTRIC_UNDERFLOOR_HEATING_CONTROLLER_H

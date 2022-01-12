@@ -85,12 +85,14 @@ static void vInitializeEeprom(void)
 
     // Update initial values
     EEPROM.put(EEPROM_ADDRESS_ID, (uint8_t)DEVICE_ID);
+    EEPROM.put(EEPROM_ADDRESS_SUM_WINTER, (uint8_t)Winter); // To start working after initial uploard
     EEPROM.put(EEPROM_ADDRESS_TEMP_SET, (float)TEMP_SETPOINT_DEFAULT);
   }
   else
   {
     // Device ID didn't changed, load values
     EEPROM.get(EEPROM_ADDRESS_TEMP_SET, Heater.dTemperatureSetpoint);
+    EEPROM.get(EEPROM_ADDRESS_SUM_WINTER, Heater.fSummerWinterMode);
 
     // Check if old value is valid, apply limitations!
     Heater.dTemperatureSetpoint = min(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MAX);
@@ -99,6 +101,8 @@ static void vInitializeEeprom(void)
 #ifdef DEBUG
     Serial.print("Device ID didn't changed, read old setpoint from EEPROM: ");
     Serial.println(Heater.dTemperatureSetpoint);
+    Serial.print("And old state of summer winter mode:: ");
+    Serial.println(Heater.fSummerWinterMode);
 #endif
   }
 }
@@ -268,8 +272,9 @@ static void vTwoPointTemperatureRegulation(void)
     fMaxTempViolated = false;
   }
 
-  // If maximum temperature is violated, set off the heater
-  if(fMaxTempViolated == true)
+  // If maximum temperature is violated, or summer mode is active, set off the heater
+  if(   (fMaxTempViolated == true)
+      ||(Heater.fSummerWinterMode == Summer)  )
   {
     Heater.fRelayState = false;
   }
@@ -298,6 +303,7 @@ static void vInitializeKNX(void)
   knx.addListenGroupAddress(KNX_GA_WINDOW_2_STATE);
   knx.addListenGroupAddress(KNX_GA_FROST_PROTECTION); 
   knx.addListenGroupAddress(KNX_GA_DAY_NIGHT);
+  knx.addListenGroupAddress(KNX_GA_SUMMER_WINTER);
 }
 
 void serialEvent1() 
@@ -373,6 +379,17 @@ void serialEvent1()
 #ifdef DEBUG
         Serial.print("Current room temperature: ");
         Serial.println(Heater.dRoomTemperature);
+#endif
+        }
+        // Current summer/winter state
+        else if(strcmp(target.c_str(), KNX_GA_SUMMER_WINTER) == 0) 
+        {
+          Heater.fSummerWinterMode = telegram->getBool();
+          EEPROM.put(EEPROM_ADDRESS_SUM_WINTER, (uint8_t)Heater.fSummerWinterMode);
+
+#ifdef DEBUG
+        Serial.print("Summer/Winter changed to: ");
+        Serial.println(Heater.fSummerWinterMode);
 #endif
         }
         // Current day/night state
