@@ -2,13 +2,17 @@
 #include <OneWire.h>
 #include <DallasTemperature.h>
 #include <KnxTpUart.h>
-#include <EEPROM.h>
 #include "ElectricUnderfloorHeatingController.h"
 
 /* -------------------------------------------------------------------------- 
 * DEFINES
 ---------------------------------------------------------------------------- */
 //#define DEBUG
+#define EEPROM_AVAILABLE
+
+#ifdef EEPROM_AVAILABLE
+#include <EEPROM.h>
+#endif
 
 /* -------------------------------------------------------------------------- 
 Objects/variables
@@ -19,7 +23,7 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress tempDeviceAddress;
 
 // KNX device
-KnxTpUart knx(&Serial1, KNX_PA);
+KnxTpUart knx(&Serial, KNX_PA);
 
 // Electric floor heating variables
 ElectricFloorHeatingRegulation Heater;
@@ -74,6 +78,7 @@ void loop(void)
 ---------------------------------------------------------------------------- */
 static void vInitializeEeprom(void)
 {
+#ifdef EEPROM_AVAILABLE
   // Check if Device ID changed
   if(EEPROM.read(EEPROM_ADDRESS_ID) != DEVICE_ID)
   {
@@ -109,6 +114,7 @@ static void vInitializeEeprom(void)
     Serial.println(Heater.fSummerWinterMode);
 #endif
   }
+#endif
 }
 
 static void vTemperatureSensorSetup(void)
@@ -207,6 +213,8 @@ static void vSendRelayStateToKnx(void)
 {
   static uint32_t u32LastTime = millis();
   static bool fLastSendState = false;
+
+  // TODO Add periodic send, if no state change was triggered, to ensure the actuator has the right state
 
     // Check if an update of the relay state is needed
   if(fLastSendState != Heater.fRelayState)
@@ -354,13 +362,13 @@ static void vTwoPointTemperatureRegulation(void)
 static void vInitializeKNX(void) 
 {
   // Initialize connection to KNX BCU
-  Serial1.begin(19200,SERIAL_8E1); // Even parity;
-  while (!Serial1) {
+  Serial.begin(19200,SERIAL_8E1); // Even parity;
+  while (!Serial) {
     ; // wait for serial port to connect
   }
 
   // Reset UART
-  if(Serial1.available()) {
+  if(Serial.available()) {
     knx.uartReset();
   }
 
@@ -378,7 +386,7 @@ static void vInitializeKNX(void)
   knx.addListenGroupAddress(KNX_GA_ERROR);
 }
 
-void serialEvent1() 
+void serialEvent() 
 {
   KnxTpUartSerialEventType eType = knx.serialEvent();
 
@@ -440,8 +448,10 @@ void serialEvent1()
           Heater.dTemperatureSetpoint = min(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MAX);
           Heater.dTemperatureSetpoint = max(Heater.dTemperatureSetpoint, TEMP_SETPOINT_MIN); 
 
+#ifdef EEPROM_AVAILABLE
           // Update EEPROM, if value has changed
           EEPROM.put(EEPROM_ADDRESS_TEMP_SET, (float)Heater.dTemperatureSetpoint);
+#endif
 
 #ifdef DEBUG
         Serial.print("New room temperature setpoint: ");
@@ -462,7 +472,9 @@ void serialEvent1()
         else if(strcmp(target.c_str(), KNX_GA_SUMMER_WINTER) == 0) 
         {
           Heater.fSummerWinterMode = telegram->getBool();
+#ifdef EEPROM_AVAILABLE
           EEPROM.put(EEPROM_ADDRESS_SUM_WINTER, (uint8_t)Heater.fSummerWinterMode);
+#endif
 
 #ifdef DEBUG
         Serial.print("Summer/Winter changed to: ");
